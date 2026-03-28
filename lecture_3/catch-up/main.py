@@ -3,8 +3,9 @@ from botocore.exceptions import ClientError
 from auth import init_client
 from bucket.crud import list_buckets, create_bucket, delete_bucket, bucket_exists
 from bucket.policy import read_bucket_policy, assign_policy
-from object.crud import download_file_and_upload_to_s3, get_objects, upload_file
+from object.crud import download_file_and_upload_to_s3, get_objects, upload_file, multipart_upload
 from bucket.encryption import set_bucket_encryption, read_bucket_encryption
+from bucket.policy import set_lifecycle_policy
 import argparse
 
 parser = argparse.ArgumentParser(
@@ -33,6 +34,15 @@ parser = argparse.ArgumentParser(
         -bn new-bucket-btu-1 -amp
     long:
         --bn new-bucket-btu-1 --assign_missing_policy
+
+    How to upload a small file:
+        python main.py -bn my-bucket -fp ./hello.txt -uf
+
+    How to upload a large file (multipart):
+        python main.py -bn my-bucket -fp ./bigfile.zip -mpu
+
+    How to set lifecycle policy (120-day auto-delete):
+        python main.py -bn my-bucket -lp
     """,
     prog="main.py",
     epilog="DEMO APP FOR BTU_AWS",
@@ -182,13 +192,32 @@ parser.add_argument(
 )
 
 parser.add_argument(
+    "-fp",
+    "--file_path",
+    type=str,
+    help="Local file path used for upload operations.",
+    default=None,
+)
+
+parser.add_argument(
     "-uf",
     "--upload_file",
-    type=str,
-    help="Upload file",
-    nargs="?",
-    const="True",
-    default="False",
+    help="Upload a small file to the bucket (requires -fp).",
+    action="store_true",
+)
+
+parser.add_argument(
+    "-mpu",
+    "--multipart_upload",
+    help="Upload a large file using multipart upload (requires -fp).",
+    action="store_true",
+)
+
+parser.add_argument(
+    "-lp",
+    "--lifecycle_policy",
+    help="Set a lifecycle policy that deletes objects after 120 days.",
+    action="store_true",
 )
 
 
@@ -240,8 +269,20 @@ def main():
         if args.list_objects == "True":
             get_objects(s3_client, args.bucket_name)
 
-        if args.upload_file == "True":
-            upload_file(s3_client, args.upload_file, args.bucket_name)
+        if args.upload_file:
+            if not args.file_path:
+                parser.error("--upload_file requires --file_path (-fp)")
+            if upload_file(s3_client, args.file_path, args.bucket_name):
+                print(f"File '{args.file_path}' uploaded successfully.")
+
+        if args.multipart_upload:
+            if not args.file_path:
+                parser.error("--multipart_upload requires --file_path (-fp)")
+            multipart_upload(s3_client, args.file_path, args.bucket_name)
+
+        if args.lifecycle_policy:
+            if set_lifecycle_policy(s3_client, args.bucket_name):
+                print("Lifecycle policy set: objects deleted after 120 days.")
 
     if args.list_buckets:
         buckets = list_buckets(s3_client)

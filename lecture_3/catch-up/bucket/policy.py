@@ -66,3 +66,20 @@ def read_bucket_policy(aws_s3_client, bucket_name):
     if status_code == 200:
         return policy["Policy"]
     return False
+
+def set_lifecycle_policy(aws_s3_client, bucket_name, days=120, prefix=""):
+    lfc = {
+        "Rules": [
+            {
+                "ID": f"auto-delete-after-{days}-days",
+                "Filter": {"Prefix": prefix},
+                "Status": "Enabled",
+                "Expiration": {"Days": days},
+            }
+        ]
+    }
+    aws_s3_client.put_bucket_lifecycle_configuration(
+        Bucket=bucket_name,
+        LifecycleConfiguration=lfc,
+    )
+    return True
